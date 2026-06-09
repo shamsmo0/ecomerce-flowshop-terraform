@@ -59,7 +59,7 @@ jobs:
         id: meta
         run: |
           TAG="backend-${{ github.sha }}"
-          IMAGE="${{ steps.login-ecr.outputs.registry }}/shopflow-backend:$TAG"
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/shopflow:$TAG"
           echo "backend_tag=$TAG" >> $GITHUB_OUTPUT
           echo "backend_image=$IMAGE" >> $GITHUB_OUTPUT
       
@@ -67,9 +67,9 @@ jobs:
         run: |
           cd backend
           docker build -t ${{ steps.meta.outputs.backend_image }} .
-          docker tag ${{ steps.meta.outputs.backend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow-backend:latest
+          docker tag ${{ steps.meta.outputs.backend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow:latest
           docker push ${{ steps.meta.outputs.backend_image }}
-          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow-backend:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow:latest
 
   build-frontend:
     name: Build and Push Frontend to ECR
@@ -96,7 +96,7 @@ jobs:
         id: meta
         run: |
           TAG="frontend-${{ github.sha }}"
-          IMAGE="${{ steps.login-ecr.outputs.registry }}/shopflow-frontend:$TAG"
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/shopflow:$TAG"
           echo "frontend_tag=$TAG" >> $GITHUB_OUTPUT
           echo "frontend_image=$IMAGE" >> $GITHUB_OUTPUT
       
@@ -106,7 +106,7 @@ jobs:
           docker build -t ${{ steps.meta.outputs.frontend_image }} .
           docker tag ${{ steps.meta.outputs.frontend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow-frontend:latest
           docker push ${{ steps.meta.outputs.frontend_image }}
-          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow-frontend:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow:latest
 
   terraform-plan:
     name: Terraform Plan
