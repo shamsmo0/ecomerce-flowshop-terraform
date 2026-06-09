@@ -16,4 +16,4 @@ db_name     = "shopflowdb"
 db_username = "admin"
 db_password = "Admin123456"
 
-ecr_repository_url = "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/shopflow"
+ecr_repository_url = "114223852322.dkr.ecr.us-east-1.amazonaws.com/shopflow"
