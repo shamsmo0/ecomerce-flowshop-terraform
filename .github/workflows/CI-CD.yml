@@ -1,0 +1,237 @@
+name: ShopFlow CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: ./terraform/environments/dev
+
+jobs:
+  lint-backend:
+    name: Lint Backend Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Backend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+          failure-threshold: warning
+
+  lint-frontend:
+    name: Lint Frontend Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Frontend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+          failure-threshold: warning
+
+  build-backend:
+    name: Build and Push Backend to ECR
+    runs-on: ubuntu-latest
+    needs: lint-backend
+    outputs:
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      backend_tag: ${{ steps.meta.outputs.backend_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.cicd_access_key_id }}
+          aws-secret-access-key: ${{ secrets.cicd_secret_access_key }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Set image metadata
+        id: meta
+        run: |
+          TAG="backend-${{ github.sha }}"
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/shopflow-backend:$TAG"
+          echo "backend_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "backend_image=$IMAGE" >> $GITHUB_OUTPUT
+      
+      - name: Build and push Backend
+        run: |
+          cd backend
+          docker build -t ${{ steps.meta.outputs.backend_image }} .
+          docker tag ${{ steps.meta.outputs.backend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow-backend:latest
+          docker push ${{ steps.meta.outputs.backend_image }}
+          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow-backend:latest
+
+  build-frontend:
+    name: Build and Push Frontend to ECR
+    runs-on: ubuntu-latest
+    needs: lint-frontend
+    outputs:
+      frontend_image: ${{ steps.meta.outputs.frontend_image }}
+      frontend_tag: ${{ steps.meta.outputs.frontend_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.cicd_access_key_id }}
+          aws-secret-access-key: ${{ secrets.cicd_secret_access_key }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Set image metadata
+        id: meta
+        run: |
+          TAG="frontend-${{ github.sha }}"
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/shopflow-frontend:$TAG"
+          echo "frontend_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "frontend_image=$IMAGE" >> $GITHUB_OUTPUT
+      
+      - name: Build and push Frontend
+        run: |
+          cd frontend
+          docker build -t ${{ steps.meta.outputs.frontend_image }} .
+          docker tag ${{ steps.meta.outputs.frontend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow-frontend:latest
+          docker push ${{ steps.meta.outputs.frontend_image }}
+          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow-frontend:latest
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.cicd_access_key_id }}
+          aws-secret-access-key: ${{ secrets.cicd_secret_access_key }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.0
+      
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+      
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+      
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan \
+            -var="backend_image=${{ needs.build-backend.outputs.backend_image }}" \
+            -var="frontend_image=${{ needs.build-frontend.outputs.frontend_image }}" \
+            -var="image_tag=${{ github.sha }}" \
+            -out=tfplan
+      
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_DIR }}/tfplan
+          retention-days: 1
+
+  approval:
+    name: Await Manual Approval
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    environment: production
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Wait for approval
+        run: echo "Waiting for manual approval before deploying to production"
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: [approval, build-backend, build-frontend]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.cicd_access_key_id }}
+          aws-secret-access-key: ${{ secrets.cicd_secret_access_key }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.0
+      
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+      
+      - name: Download Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_DIR }}
+      
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.cicd_access_key_id }}
+          aws-secret-access-key: ${{ secrets.cicd_secret_access_key }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.0
+      
+      - name: Get ALB DNS Name
+        id: alb
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -reconfigure
+          echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+      
+      - name: Test Application Health
+        run: |
+          echo "Testing: http://${{ steps.alb.outputs.alb_dns }}"
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://${{ steps.alb.outputs.alb_dns }} || echo "000")
+            echo "Attempt $i/30 - HTTP $STATUS"
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "302" ]; then
+              echo "Smoke test passed"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Smoke test failed"
+          exit 1
