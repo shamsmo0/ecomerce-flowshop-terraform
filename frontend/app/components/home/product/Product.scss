@@ -1,0 +1,234 @@
+.product-section {
+  margin: 2rem 0;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.section-title {
+  font-size: 1.75rem;
+  margin-bottom: 2rem;
+  font-weight: 500;
+  text-align: left;
+  color: #222;
+  letter-spacing: -0.5px;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 2rem 1.5rem;
+  
+  @media (max-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem 1rem;
+  }
+  
+  @media (max-width: 400px) {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+
+.product-card {
+  display: flex;
+  flex-direction: column;
+  background-color: transparent;
+  position: relative;
+  border: 1px solid lightgray;
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+  border-radius: 5px;
+  
+  &:hover {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    
+    .product-image-container {
+      filter: brightness(1.08);
+    }
+    
+    .product-name {
+      color: #444;
+    }
+    
+    .product-actions {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+  
+  a {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+}
+
+.product-image-container {
+  position: relative;
+  padding-top: 100%;
+  overflow: hidden;
+  background-color: #fafafa;
+  transition: filter 0.3s ease;
+}
+
+.product-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.placeholder-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.discount-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: #d32f2f;
+  color: white;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  z-index: 2;
+  border-radius: 3px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.product-info {
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  padding: 0.5rem 1rem;
+}
+
+.product-name {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #222;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 2.8rem;
+  transition: color 0.2s ease;
+}
+
+.product-price {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  
+  .price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  
+  .original-price {
+    text-decoration: line-through;
+    color: #999;
+    font-weight: 400;
+    font-size: 0.85rem;
+  }
+  
+  .discount-price {
+    color: #d32f2f;
+    font-weight: 500;
+  }
+  
+  .regular-price {
+    color: #333;
+    font-weight: 500;
+  }
+}
+
+.loading-container, .error-container {
+  text-align: center;
+  padding: 3rem 0;
+  font-size: 0.95rem;
+  color: #666;
+}
+
+.error-container {
+  color: #d32f2f;
+}
+
+.no-products-message {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem 0;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.product-actions {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  width: 100%;
+  background-color: rgba(0, 0, 0, 0.75);
+  padding: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 5;
+  backdrop-filter: blur(3px);
+  border-radius: 5px;
+  
+  .view-product-btn,
+  .add-to-cart-btn {
+    flex: 1;
+    padding: 0.5rem 0;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    text-decoration: none;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .view-product-btn {
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    color: white;
+    
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+      border-color: white;
+    }
+  }
+  
+  .add-to-cart-btn {
+    background-color: white;
+    color: #111;
+    border: 1px solid white;
+    
+    &:hover {
+      background-color: #f0f0f0;
+    }
+  }
+}

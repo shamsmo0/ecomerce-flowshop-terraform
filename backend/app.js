@@ -1,0 +1,42 @@
+const path = require('path')
+require('dotenv').config({ path: path.join(__dirname, '.env') })
+
+const express = require('express')
+const cors = require('cors')
+const cookieParser = require('cookie-parser')
+const app = express()
+
+const PORT = process.env.PORT || 8080
+
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Set-Cookie']
+}))
+
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+app.use(cookieParser())
+
+app.use('/static', express.static(path.join(__dirname, 'static')))
+app.set('view engine','ejs')
+app.set('views', path.join(__dirname, 'views'))
+
+// ---------------------------------------------------
+// Sync all models
+const syncModels = require('./model/ALLMODELSYNC');
+syncModels();
+// ---------------------------------------------------
+
+
+// ---------------------------------------------------
+const registerRoutes = require('./routes');
+registerRoutes(app); 
+// ---------------------------------------------------
+
+app.listen(PORT,()=>{
+    console.log('Server is running on port: ' + PORT)
+    console.log(`http://localhost:${PORT}`)
+})

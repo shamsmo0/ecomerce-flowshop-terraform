@@ -1,0 +1,289 @@
+const bcrypt = require('bcrypt');
+const User = require('../../../model/UserModel');
+const jwt = require('jsonwebtoken');
+const UAParser = require('ua-parser-js');
+const { sendNewDeviceLoginAlert, sendOTPEmail } = require('../../../services/emailServices');
+const { Op } = require('sequelize');
+const { updateTrustedDevices } = require('../utils/deviceUtils');
+const {
+    generateAccessToken,
+    getRefreshSecret,
+    setAuthCookies,
+    clearAuthCookies,
+} = require('../../../utils/authTokens');
+
+const blacklistedTokens = new Set();
+
+const getDeviceFingerprint = (req) => {
+    const parser = new UAParser(req.headers['user-agent']);
+    const userAgent = parser.getResult();
+    
+    return {
+        browser: userAgent.browser.name,
+        os: userAgent.os.name,
+        device: userAgent.device.type || 'desktop',
+        ip: req.ip
+    };
+};
+
+exports.login = async (req, res) => {
+    try {
+        const { email, password, rememberMe } = req.body;
+        const user = await User.findOne({ 
+            where: { email },
+            attributes: { include: ['trustedDevices', 'password'] }
+        });
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid credentials'
+            });
+        }
+
+        if (!user.password) {
+            return res.status(401).json({
+                success: false,
+                message: 'Please sign in with Google'
+            });
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid credentials'
+            });
+        }
+
+        const deviceInfo = getDeviceFingerprint(req);
+        const { updates, deviceExists } = await updateTrustedDevices(user, deviceInfo);
+
+        if (!deviceExists) {
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const otpExpires = new Date(Date.now() + 10 * 60 * 1000); 
+
+            await User.update({
+                otp,
+                otpExpires
+            }, {
+                where: { id: user.id }
+            });
+
+            await sendOTPEmail(user.email, otp);
+
+            return res.status(200).json({
+                success: true,
+                requireOTP: true,
+                message: 'OTP sent to email'
+            });
+        }
+
+        const lastLoginDevice = (() => {
+            try {
+                return user.last_login_device ? JSON.parse(user.last_login_device) : null;
+            } catch (e) {
+                console.error('Error parsing last_login_device:', e);
+                return null;
+            }
+        })();
+
+        if (lastLoginDevice &&
+            (lastLoginDevice.browser !== deviceInfo.browser ||
+             lastLoginDevice.os !== deviceInfo.os ||
+             lastLoginDevice.device !== deviceInfo.device)) {
+            await sendNewDeviceLoginAlert(user.email, deviceInfo);
+        }
+
+        const accessToken = generateAccessToken(user.id);
+
+        await User.update({
+            ...updates,
+            last_login_ip: deviceInfo.ip,
+            last_login_device: JSON.stringify(deviceInfo)
+        }, {
+            where: { id: user.id }
+        });
+
+        setAuthCookies(res, user, accessToken, Boolean(rememberMe));
+
+        return res.status(200).json({
+            success: true,
+            message: 'Login successful',
+            data: {
+                accessToken,
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Login error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+exports.verifyOTP = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const deviceInfo = getDeviceFingerprint(req);
+
+        if (!email || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and OTP are required'
+            });
+        }
+
+        const user = await User.findOne({
+            where: {
+                email,
+                otp,
+                otpExpires: { [Op.gt]: new Date() }
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid or expired OTP'
+            });
+        }
+
+        const { updates } = await updateTrustedDevices(user, deviceInfo);
+
+        await User.update({
+            ...updates,
+            otp: null,
+            otpExpires: null
+        }, {
+            where: { id: user.id }
+        });
+
+        const accessToken = generateAccessToken(user.id);
+
+        setAuthCookies(res, user, accessToken, false);
+
+        return res.status(200).json({
+            success: true,
+            message: 'OTP verified successfully',
+            data: {
+                accessToken,
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('OTP verification error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+exports.logout = async (req, res) => {
+    try {
+        for (const name of ['sessionToken', 'refreshToken', 'rememberMeToken']) {
+            const t = req.cookies[name];
+            if (t) blacklistedTokens.add(t);
+        }
+
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            blacklistedTokens.add(authHeader.split(' ')[1]);
+        }
+
+        clearAuthCookies(res);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Logged out successfully'
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error during logout'
+        });
+    }
+};
+
+exports.refreshAccess = async (req, res) => {
+    try {
+        const refreshSecret = getRefreshSecret();
+        let userId = null;
+
+        const decodeRefresh = (raw, secret, requireRefreshTyp) => {
+            try {
+                if (!raw || blacklistedTokens.has(raw)) return null;
+                const decoded = jwt.verify(raw, secret);
+                if (requireRefreshTyp && decoded.typ !== 'refresh') return null;
+                return decoded.userId || decoded.id || null;
+            } catch {
+                return null;
+            }
+        };
+
+        if (req.cookies.refreshToken) {
+            userId = decodeRefresh(req.cookies.refreshToken, refreshSecret, true);
+        }
+        if (!userId && req.cookies.rememberMeToken) {
+            userId = decodeRefresh(req.cookies.rememberMeToken, process.env.JWT_SECRET, false);
+        }
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Session expired. Please sign in again.',
+            });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: 'User not found',
+            });
+        }
+
+        const accessToken = generateAccessToken(user.id);
+        const opts = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'Strict',
+            path: '/',
+        };
+        res.cookie('sessionToken', accessToken, {
+            ...opts,
+            maxAge: 24 * 3600000,
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: { accessToken },
+        });
+    } catch (error) {
+        console.error('Refresh access error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+        });
+    }
+};
+
+exports.isTokenBlacklisted = (token) => {
+    return blacklistedTokens.has(token);
+};
