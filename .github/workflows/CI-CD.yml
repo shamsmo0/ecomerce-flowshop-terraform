@@ -9,7 +9,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  TF_DIR: ./terraform/environments/dev
+  TF_DIR: .
 
 jobs:
   lint-backend:
