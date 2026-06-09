@@ -88,3 +88,21 @@ variable "ecr_repository_url" {
   default = ""  # 
   description = "ECR repository URL for the application"
 }
+# ECR images variables for CI/CD
+variable "backend_image" {
+  description = "Backend Docker image URL from ECR"
+  type        = string
+  default     = ""
+}
+
+variable "frontend_image" {
+  description = "Frontend Docker image URL from ECR"
+  type        = string
+  default     = ""
+}
+
+variable "image_tag" {
+  description = "Docker image tag from GitHub SHA"
+  type        = string
+  default     = ""
+}
