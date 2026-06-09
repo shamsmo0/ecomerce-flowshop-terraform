@@ -67,9 +67,12 @@ jobs:
         run: |
           cd backend
           docker build -t ${{ steps.meta.outputs.backend_image }} .
-          docker tag ${{ steps.meta.outputs.backend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow:latest
           docker push ${{ steps.meta.outputs.backend_image }}
-          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow:latest
+          
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            docker tag ${{ steps.meta.outputs.backend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow:backend-latest
+            docker push ${{ steps.login-ecr.outputs.registry }}/shopflow:backend-latest
+          fi
 
   build-frontend:
     name: Build and Push Frontend to ECR
@@ -104,9 +107,12 @@ jobs:
         run: |
           cd frontend
           docker build -t ${{ steps.meta.outputs.frontend_image }} .
-          docker tag ${{ steps.meta.outputs.frontend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow-frontend:latest
           docker push ${{ steps.meta.outputs.frontend_image }}
-          docker push ${{ steps.login-ecr.outputs.registry }}/shopflow:latest
+          
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            docker tag ${{ steps.meta.outputs.frontend_image }} ${{ steps.login-ecr.outputs.registry }}/shopflow:frontend-latest
+            docker push ${{ steps.login-ecr.outputs.registry }}/shopflow:frontend-latest
+          fi
 
   terraform-plan:
     name: Terraform Plan
