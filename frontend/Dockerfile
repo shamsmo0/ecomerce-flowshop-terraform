@@ -2,7 +2,6 @@
 # Stage 1: Install dependencies
 # ==========================================
 FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat=1.1.7-r0
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
