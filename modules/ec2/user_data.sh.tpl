@@ -4,14 +4,11 @@ set -e
 exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
 yum update -y
-amazon-linux-extras install docker -y
+yum install -y docker
+
 systemctl start docker
 systemctl enable docker
 usermod -a -G docker ec2-user
-
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-./aws/install
 
 aws ecr get-login-password --region ${aws_region} | \
   docker login --username AWS --password-stdin ${account_id}.dkr.ecr.${aws_region}.amazonaws.com
