@@ -23,7 +23,7 @@ docker pull ${ecr_repository_url}:frontend-latest
 docker run -d \
   --name shopflow-frontend \
   --restart always \
-  -p 3000:3000 \
+  -p 80:3000 \
   ${ecr_repository_url}:frontend-latest
 
 sleep 5
