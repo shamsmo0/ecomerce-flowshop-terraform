@@ -19,5 +19,5 @@ docker pull ${ecr_repository_url}:latest
 docker run -d \
   --name shopflow-app \
   --restart always \
-  -p 8080:80 \
+  -p 8080:8080 \
   ${ecr_repository_url}:latest
