@@ -41,3 +41,6 @@ variable "aws_region" {
 variable "ec2_instance_profile" {
   type = string
 }
+variable "account_id" {
+  type = string
+}
