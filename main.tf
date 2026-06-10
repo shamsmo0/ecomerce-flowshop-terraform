@@ -29,6 +29,7 @@ module "ec2" {
   ecr_repository_url    = var.ecr_repository_url
   aws_region            = var.aws_region
   ec2_instance_profile  = module.iam.ec2_instance_profile_name
+  account_id            = var.account_id
 }
 
 module "rds" {
