@@ -148,7 +148,7 @@ resource "aws_launch_template" "app" {
   user_data = base64encode(templatefile("${path.module}/user_data.sh.tpl", {
     ecr_repository_url = var.ecr_repository_url
     aws_region         = var.aws_region
-    aws_account_id     = var.aws_account_id
+    account_id     = var.aws_account_id
   }))
 
   tag_specifications {
