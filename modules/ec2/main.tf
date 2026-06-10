@@ -17,7 +17,6 @@ data "aws_key_pair" "main" {
   key_name = var.key_pair_name
 }
 
-
 resource "aws_security_group" "bastion" {
   name        = "${var.project_name}-${var.environment}-bastion-sg"
   description = "Security group for bastion host - allows SSH from internet"
@@ -86,9 +85,17 @@ resource "aws_security_group" "app" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description     = "App port from ALB only"
-    from_port       = 8080
-    to_port         = 8080
+    description     = "Frontend from ALB"
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  ingress {
+    description     = "Backend from ALB"
+    from_port       = 5000
+    to_port         = 5000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
@@ -148,7 +155,7 @@ resource "aws_launch_template" "app" {
   user_data = base64encode(templatefile("${path.module}/user_data.sh.tpl", {
     ecr_repository_url = var.ecr_repository_url
     aws_region         = var.aws_region
-    account_id     = var.account_id
+    account_id         = var.account_id
   }))
 
   tag_specifications {
@@ -182,7 +189,7 @@ resource "aws_lb" "main" {
 
 resource "aws_lb_target_group" "app" {
   name        = "${var.project_name}-${var.environment}-tg"
-  port        = 8080
+  port        = 3000
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "instance"
