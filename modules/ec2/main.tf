@@ -143,6 +143,16 @@ resource "aws_launch_template" "app" {
   instance_type = var.instance_type
   key_name      = data.aws_key_pair.main.key_name
 
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_size           = 30
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
+  }
+
   iam_instance_profile {
     name = var.ec2_instance_profile
   }
@@ -187,8 +197,8 @@ resource "aws_lb" "main" {
   }
 }
 
-resource "aws_lb_target_group" "app" {
-  name        = "${var.project_name}-${var.environment}-tg"
+resource "aws_lb_target_group" "frontend" {
+  name        = "${var.project_name}-${var.environment}-fe-tg"
   port        = 3000
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -205,7 +215,31 @@ resource "aws_lb_target_group" "app" {
   }
 
   tags = {
-    Name        = "${var.project_name}-${var.environment}-tg"
+    Name        = "${var.project_name}-${var.environment}-fe-tg"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_lb_target_group" "backend" {
+  name        = "${var.project_name}-${var.environment}-be-tg"
+  port        = 5000
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+
+  health_check {
+    path                = "/api/health"
+    protocol            = "HTTP"
+    port                = "traffic-port"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-be-tg"
     Environment = var.environment
     Project     = var.project_name
   }
@@ -218,7 +252,23 @@ resource "aws_lb_listener" "http" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.app.arn
+    target_group_arn = aws_lb_target_group.frontend.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "backend" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
   }
 }
 
@@ -228,7 +278,7 @@ resource "aws_autoscaling_group" "app" {
   min_size            = 1
   max_size            = 3
   vpc_zone_identifier = var.private_subnet_ids
-  target_group_arns   = [aws_lb_target_group.app.arn]
+  target_group_arns   = [aws_lb_target_group.frontend.arn, aws_lb_target_group.backend.arn]
   health_check_type   = "ELB"
 
   launch_template {
